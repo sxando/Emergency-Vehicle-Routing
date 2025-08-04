@@ -671,7 +671,7 @@ This reduces unnecessary node expansions significantly.
 
 Complexity:
 Best-case: O(N logN)
-Average-case (tie-breaking heuristic): Improved to O(N logN)
+Average-case (tie-breaking heuristic): Improved to O(N^2 logN)
 Worst-case: O(N^2 logN)
 
 '''

@@ -80,11 +80,39 @@ def heuristic(a, b):
     return abs(a[0]-b[0]) + abs(a[1]-b[1])
 
 
+def build_path(came_from, start, goal):
+    """
+    Reconstructs the path from goal to start using the came_from map.
+
+    Parameters:
+        came_from (dict): Mapping of node -> parent node.
+        start (tuple): Start node (row, col).
+        goal (tuple): Goal node (row, col).
+
+    Returns:
+        path (list): List of nodes from start to goal, or None if unreachable.
+    """
+    path = [goal]
+    current = goal
+    while current != start:
+        if current not in came_from:
+            return None  # No path found
+        current = came_from[current]
+        path.append(current)
+    return path[::-1]
+
+
 def a_star(grid, start, goal, return_costs=False, return_expanded=False, 
            return_visited=False):
     """
-    Performs the A* pathfinding algorithm with heuristic-based tie-breaking 
-    on a 2D grid with obstacles, ensuring minimal unnecessary node expansions.
+    Performs the A* pathfinding algorithm on a 2D grid with obstacles, 
+    finding an optimal path from start to goal.
+
+    The implementation uses a parent-pointer dictionary (came_from) to rebulid 
+    the shortest path after search, minimizing memory usage.
+
+    Tie-breaking in the priority queue uses the heuristic value (h) to prefer 
+    nodes closer to the goal when f values are equal.
 
     Parameters:
         grid: np.ndarray
@@ -119,11 +147,13 @@ def a_star(grid, start, goal, return_costs=False, return_expanded=False,
                            expansions (if return_visited=True).
 
     Optimization Notes:
-        - Includes a heuristic-based tie-breaking method: prioritizing nodes 
-          with lower heuristic values (closer to the goal) when nodes have 
-          identical f(n) values.
+        - Use a min-heap (priority queue) and a heuristic-based tie-breaking 
+          method: prioritizing nodes with lower heuristic values (closer to 
+          the goal) when nodes have identical f(n) values.
         - This tie-breaking reduces unnecessary expansions in grids with uniform 
           movement costs and identical values.
+        - The parent-pointer method allows efficient O(N) memory use,
+          rebuilding the full path only once after the search.
 
     Complexity:
         - Best-case: O(N logN)
@@ -131,38 +161,51 @@ def a_star(grid, start, goal, return_costs=False, return_expanded=False,
                         (Previous: O(N logN) < O(Avg case) < O(N^2 logN))
         - Worst-case: O(N^2 logN)
     """
-    # open_set: priority queue of nodes to explore; each entry is
-    open_set = []
-    # closed_set: set of already-expanded nodes to avoid re-exploration
-    closed_set = set()
+    open_set = []       # priority queue of nodes to explore (frontier nodes)
+    closed_set = set()  # Set of already-expanded nodes to avoid re-exploration
+
+    came_from = {}      # To reconstruct the optimal path at the end
     
     # Dictionary tracking the lowest cost (g) for each node
     g_score = {start: 0}
     
     # Dictionary tracking costs (g, h, f) for each node for return purposes
-    costs = {start: (0, heuristic(start, goal), heuristic(start, goal))}
-    
-    # List tracking the order of nodes expanded
-    visit_order = []
-    
-    # Counter tracking total number of expansions
-    expanded_nodes_count = 0
+    costs = {}
 
-    # Compute heuristic for the start node for readability
+    visit_order = []            # List tracking the order of nodes expanded
+    expanded_nodes_count = 0    # Counter tracking total number of expansions
+
+    # Compute heuristic (Manhattan distance) from start to goal
     h_start = heuristic(start, goal)
     f_start = h_start  # g(start) = 0. So, f(start) = h(start)
+    if return_costs:
+        costs[start] = (0, h_start, f_start)
 
-    # Priority queue entry includes (f, heuristic h, g, node coordinates, path)
-    heapq.heappush(open_set, (f_start, h_start, 0, start, [start]))
+    # Push the start node onto the heap; tuple is (f, h, node)
+    heapq.heappush(open_set, (f_start, h_start, start))
 
     while open_set:
-        # Extract node with lowest f; heuristic h breaks ties
-        current_f, current_h, current_g, current_node, current_path = \
-            heapq.heappop(open_set)
+        # Extract node with lowest f (break ties with h)
+        current_f, current_h, current_node = heapq.heappop(open_set)
 
-        # Goal found: construct and return the result tuple
+        # # Skip node if already expanded (could be duplicate in heap)
+        if current_node in closed_set:
+            continue
+
+        # Mark as expanded
+        closed_set.add(current_node)
+
+        # Record expansion for optional statistics
+        if return_visited:
+            visit_order.append(current_node)
+        if return_expanded:
+            expanded_nodes_count += 1
+
+        # Check Goal is found
         if current_node == goal:
-            result = [current_path]
+            # Rebuild the optimal path from start to goal
+            path = build_path(came_from, start, goal)
+            result = [path]
             if return_costs:
                 result.append(costs)
             if return_expanded:
@@ -171,19 +214,10 @@ def a_star(grid, start, goal, return_costs=False, return_expanded=False,
                 result.append(visit_order)
             return tuple(result)
 
-        # Skip node if already expanded
-        if current_node in closed_set:
-            continue
-
-        # Mark node as expanded
-        closed_set.add(current_node)
-        visit_order.append(current_node)
-        expanded_nodes_count += 1
-
         # Explore neighbors in 4 directions
         for direction in DIRS:
-            neighbor_row, neighbor_col = (current_node[0] + direction[0], 
-                                          current_node[1] + direction[1])
+            neighbor_row = current_node[0] + direction[0]
+            neighbor_col = current_node[1] + direction[1]
             neighbor_node = (neighbor_row, neighbor_col)
 
             # Skip neighbor if out of bounds or blocked
@@ -192,24 +226,28 @@ def a_star(grid, start, goal, return_costs=False, return_expanded=False,
                     grid[neighbor_row, neighbor_col] == 0):
                 continue
 
-            # Compute tentative actual cost (g) to reach neighbor
-            tentative_g = current_g + 1
+            current_g = g_score[current_node] # Cost (g) to reach current node
+            tentative_g = current_g + 1       # Cost (g) to reach neighbor
 
             # Skip neighbor if no improvement in cost is found
             if neighbor_node in g_score and tentative_g >= g_score[neighbor_node]:
                 continue
 
-            # Update best-known cost for neighbor
+            # Record optimal parent and cost for neighbor
+            came_from[neighbor_node] = current_node
             g_score[neighbor_node] = tentative_g
+
+            # Compute heuristic and total cost for neighbor
             neighbor_h = heuristic(neighbor_node, goal)
             neighbor_f = tentative_g + neighbor_h
-            costs[neighbor_node] = (tentative_g, neighbor_h, neighbor_f)
+
+            if return_costs:
+                costs[neighbor_node] = (tentative_g, neighbor_h, neighbor_f)
 
             # Insert neighbor into priority queue with heuristic tie-breaking
-            heapq.heappush(open_set, (neighbor_f, neighbor_h, tentative_g, 
-                                      neighbor_node, 
-                                      current_path + [neighbor_node]))
-
+            # (sort by f, then h)
+            heapq.heappush(open_set, (neighbor_f, neighbor_h, neighbor_node)) 
+                                      
     # No path found: return None and optionally other requested data
     result = [None]
     if return_costs:
@@ -427,7 +465,8 @@ def print_path_costs_and_heuristics(path, goal, costs, algo='astar'):
             h = 0
             f = g
         else:
-            raise ValueError("Unknown algorithm type: should be 'astar' or 'dijkstra'")
+            raise ValueError(
+                "Unknown algorithm type: should be 'astar' or 'dijkstra'")
         print(f"  {cell}: g={g}, h={h}, f={f}")
 
 
@@ -500,19 +539,25 @@ def create_map(prob_block=0.0, max_attempts=1000, start=None, goal=None):
 
 def main():
     """
-    Runs a series of pathfinding experiments comparing the A* algorithm and Dijkstra’s algorithm on random N x N grid maps with varying obstacle densities.
+    Runs a series of pathfinding experiments comparing the A* algorithm and 
+    Dijkstra’s algorithm on random N x N grid maps with varying obstacle 
+    densities.
 
     For each specified obstacle probability case:
-      - Generates a random, solvable grid map ensuring start and goal cells are open and not dead-ended.
-      - Runs both the A* and Dijkstra algorithms to solve the shortest path problem from start to goal.
-      - Collects and logs detailed statistics, expansion order, and path information for each algorithm.
+      - Generates a random, solvable grid map ensuring start and goal cells are 
+        open and not dead-ended.
+      - Runs both the A* and Dijkstra algorithms to solve the shortest path 
+        problem from start to goal.
+      - Collects and logs detailed statistics, expansion order, 
+        and path information for each algorithm.
       - Visualizes the grid, expanded nodes, path, and per-node cost values.
       - Saves all results, statistics, and visualizations for later analysis.
 
     Workflow:
-      1. Defines test cases as a set of obstacle probabilities (e.g., 0%, 20%, 50%).
+      1. Defines test cases as a set of obstacle probabilities (0%, 20%, 50%).
       2. For each case:
-         a. Attempts to generate a random map with a valid path (using A* for validation).
+         a. Attempts to generate a random map with a valid path 
+            (using A* for validation).
          b. Runs A* and Dijkstra’s algorithm on the same grid.
          c. Records:
             - Grid statistics (total, obstacles, free cells).
@@ -523,26 +568,31 @@ def main():
             - Visualizations of the map and expansion.
          d. Prints all results to the console and saves them to a .txt file.
          e. Saves visualization plots as .png image files.
-      3. If no solvable grid can be generated within the allowed number of attempts, records and reports the error.
+      3. If no solvable grid can be generated within the allowed number of 
+         attempts, records and reports the error.
 
-    Parameters:
-        None (all hyperparameters, start/goal, and obstacle rates are defined internally).
+    Parameters: None
 
-    Returns:
-        None
+    Returns: None
 
     Output/Side-effects:
-        - Prints statistics, paths, costs, and expansion orders for A* and Dijkstra to the terminal.
-        - Writes all results for each test case to a text file named "astar_case_{i}.txt".
-        - Saves visualization images for each test case and algorithm as "astar_case_{i}_astar.png" and "astar_case_{i}_dijkstra.png".
+        - Prints statistics, paths, costs, and expansion orders for A* and 
+          Dijkstra to the terminal.
+        - Writes all results for each test case to a text file named 
+          "astar_dijkstra_case_{i}.txt".
+        - Saves visualization images for each test case and algorithm as 
+          "ad_astar_case_{i}.png" and "ad_dijkstra_case_{i}.png".
 
     Exceptions:
-        - If a solvable map cannot be generated for a given obstacle probability, catches the error and records the failure for that test case.
+        - If a solvable map can't be generated for a given obstacle probability, 
+          catches the error and records the failure for that test case.
 
     Notes:
-        - The function is intended for use as a script entry point (when `__name__ == "__main__"`).
-        - Designed for extensibility: easily adjust grid size, obstacle probabilities, and algorithms.
-        - All outputs are suitable for automated comparison of search algorithm efficiency and behavior under varying map conditions.
+        - The function is intended for use as a script entry point.
+        - Designed for extensibility: easily adjust grid size, obstacle 
+          probabilities, and algorithms.
+        - All outputs are suitable for automated comparison of search algorithm 
+          efficiency and behavior under varying map conditions.
     """
     # np.random.seed(42) # For reproducibility: Remove the comment sign (#)
 
