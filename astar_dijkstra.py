@@ -371,29 +371,64 @@ def plot_map_with_costs(grid, costs, path=None, title="", start=None, goal=None,
     plt.close()
 
 
-def print_path_costs_and_heuristics(path, goal, algo='astar'):
+def print_path_costs_and_heuristics(path, goal, costs, algo='astar'):
     """
-    Prints the actual cost (g), heuristic (h), and f value for each cell 
-    along the found path.
-    For Dijkstra, h is always 0, f = g.
-    For A*, h is Manhattan distance, f = g + h.
+    Print the actual path cost (g), heuristic (h), and total cost (f) values
+    for each node along the solution path, for either A* or Dijkstra's algorithm.
+
+    For each node in the path:
+        - g: The actual cost from the start node to the current node along the path.
+        - h: The heuristic estimate from the current node to the goal.
+            - For A*, this is the Manhattan distance (L1 norm) between the node 
+              and goal.
+            - For Dijkstra, this is always 0, since Dijkstra does not use 
+              a heuristic.
+        - f: The sum of g and h (f = g + h).
+            - For A*, this is the node's evaluation value in the priority queue.
+            - For Dijkstra, this is identical to g (since h=0).
 
     Parameters:
         path: list of tuple
-              List of (row, col) tuples along the found path.
+              Ordered list of (row, col) positions along the solution path, 
+              from start to goal.
         goal: tuple
-              (row, col) tuple, the goal cell (for heuristic computation).
+              The (row, col) coordinates of the goal node.
+        costs: dict
+               A dictionary mapping (row, col) positions to their cost values.
+               For each cell, costs[cell] should be a tuple (g, h, f) for A*, or 
+               at least (g,) for Dijkstra.
+               - For A*, you can ignore the stored h and f, since h will be 
+                 recomputed.
+               - For Dijkstra, only g is needed.
+        algo: str, optional
+              The algorithm type: 'astar' (default) or 'dijkstra'.
+              Determines how h and f are computed and displayed.
 
     Returns:
         None
+
+    Notes:
+    - This function assumes that costs contains at least the g-cost for every 
+      path cell.
+    - If a cell is missing from costs, 'g=NA' will be shown.
+    - For Dijkstra's algorithm, h and f will always be 0 and g, respectively.
     """
     print("Actual cost (g) and heuristic (h) values along the path:")
-    for idx, cell in enumerate(path):
-        g = idx  # Each step costs exactly 1
-        h = heuristic(cell, goal)
-        f = g + h
+    for cell in path:
+        g = costs[cell][0] if cell in costs else "NA"
+        if algo == 'astar':
+            # Manhattan distance heuristic
+            h = abs(cell[0] - goal[0]) + abs(cell[1] - goal[1])
+            try:
+                f = g + h
+            except TypeError:
+                f = "NA"
+        elif algo == 'dijkstra':
+            h = 0
+            f = g
+        else:
+            raise ValueError("Unknown algorithm type: should be 'astar' or 'dijkstra'")
         print(f"  {cell}: g={g}, h={h}, f={f}")
-    print()
 
 
 def print_grid_stats(grid):
@@ -595,6 +630,7 @@ def main():
                 try:
                     sys.stdout = tempbuf
                     print_path_costs_and_heuristics(path_astar, goal, 
+                                                    costs_astar,
                                                     algo='astar')
                 finally:
                     sys.stdout = old_stdout
@@ -644,7 +680,9 @@ def main():
                 old_stdout = sys.stdout
                 try:
                     sys.stdout = tempbuf
-                    print_path_costs_and_heuristics(path_dijkstra, goal, algo='dijkstra')
+                    print_path_costs_and_heuristics(path_dijkstra, goal, 
+                                                    costs_dijkstra, 
+                                                    algo='dijkstra')
                 finally:
                     sys.stdout = old_stdout
                 pathcosts = tempbuf.getvalue().rstrip()
