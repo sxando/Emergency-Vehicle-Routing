@@ -157,8 +157,7 @@ def a_star(grid, start, goal, return_costs=False, return_expanded=False,
 
     Complexity:
         - Best-case: O(N logN)
-        - Average-case: O(N logN) -> Improved 
-                        (Previous: O(N logN) < O(Avg case) < O(N^2 logN))
+        - Average-case: =< O(N^2 logN)
         - Worst-case: O(N^2 logN)
     """
     open_set = []       # priority queue of nodes to explore (frontier nodes)
