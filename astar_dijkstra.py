@@ -5,7 +5,7 @@ import io
 import sys
 import time 
 
-N = 8  # Size of the grid (N x N)
+N = 30  # Size of the grid (N x N)
 DIRS = [(-1,0),(1,0),(0,-1),(0,1)]  # 4-way movement directions: 
                                     # up, down, left, right
 
@@ -362,7 +362,7 @@ def plot_map_with_costs(grid, costs, path=None, title="", start=None, goal=None,
     """
     if start is None or goal is None:
         raise ValueError("start and goal must be specified")
-    plt.figure(figsize=(7,7))
+    plt.figure(figsize=(N,N))
     plt.title(f"{title}\n(g: steps from start, h: heuristic to goal, f: g+h)")
     plt.imshow(grid, cmap='gray_r')
     plt.xticks(np.arange(grid.shape[1]))
@@ -493,7 +493,7 @@ def print_grid_stats(grid):
     print(f"Free cells: {free} ({percent_free:.1f}%)\n")
 
 
-def create_map(prob_block=0.0, max_attempts=1000, start=None, goal=None):
+def create_map(prob_block=0.0, max_attempts=10000, start=None, goal=None):
     """
     Generate a random map with a valid path from start to goal.
 
@@ -596,7 +596,7 @@ def main():
     # np.random.seed(42) # For reproducibility: Remove the comment sign (#)
 
     start = (0, 0)
-    goal = (7, 7)
+    goal = (29, 29)
     probs = [0.0, 0.2, 0.5]
     titles = ["No Obstacles (0%)", "20% Obstacles", "50% Obstacles"]
 
